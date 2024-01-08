@@ -103,7 +103,7 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         # urllib.request.ProxyHandler for more details).
         # The proxies value for using system proxies is None.
         geopy.geocoders.options.default_proxies = config.proxies
-        geopy.geocoders.options.default_user_agent = "rtdip-sdk/0.7.8"
+        geopy.geocoders.options.default_user_agent = "rtdip-sdk"
 
         _DataInterface._instance = self
 
@@ -353,7 +353,7 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
             for df, measurement in dataframes:
                 if not df.empty:
                     df.to_sql(
-                        measurement,
+                        measurement.lower(),
                         self.pcdm_engine,
                         if_exists="append",
                         index=False,
