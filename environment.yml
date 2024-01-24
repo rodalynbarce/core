@@ -79,3 +79,9 @@ dependencies:
         - trio==0.22.1
         - sqlparams==5.1.0
         - entsoe-py==0.5.10
+        - dagster==1.5.5
+        # - dagster-graphql==1.5.5
+        # - dagster-pipes==1.5.5
+        - dagster-pyspark==0.21.5
+        # - dagster-spark==0.21.5
+        - dagster-webserver==1.5.5
