@@ -157,15 +157,23 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         """
         try:
             query_list = _query_builder(query)
-
+            connection = self.pcdm_engine.connect()
             if len(query_list) == 1:
-                df = pd.read_sql(query_list[0], self.pcdm_engine)
+                cursor = connection.execute(query_list[0])
+                df = pd.DataFrame(cursor.fetchall(), columns=cursor.keys())
+                cursor.close()
+                connection.close()
                 df["_time"] = pd.to_datetime(df["_time"], utc=True)
                 return df
             elif len(query_list) > 1:
-                df_list = [pd.read_sql(query, self.pcdm_engine) for query in query_list]
-                for df in df_list:
+                df_list = []
+                for query in query_list:
+                    cursor = connection.execute(query)
+                    df = pd.DataFrame(cursor.fetchall(), columns=cursor.keys())
+                    cursor.close()
                     df["_time"] = pd.to_datetime(df["_time"], utc=True)
+                    df_list.append(df)
+                connection.close()
                 return df_list
 
         except Exception as e:
@@ -398,7 +406,13 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         query = " ".join(new_query)
 
         try:
-            return pd.read_sql(query, self.mysql_engine, params=params, **kwargs)
+            connection = self.mysql_engine.connect()
+            if params is None:
+                params = {}
+            cursor = connection.execute(query, **params)
+            connection.close()
+            if cursor.cursor is not None:
+                return pd.DataFrame(cursor.fetchall())
         except sqlalchemy.exc.OperationalError as e:
             self.logger.error("Lost connection to Databricks database", exc_info=e)
             raise
