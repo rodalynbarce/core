@@ -227,6 +227,8 @@ nav:
                   - Azure Key Vault: sdk/code-reference/pipelines/secrets/azure_key_vault.md
               - Deploy:
                   - Databricks: sdk/code-reference/pipelines/deploy/databricks.md
+              - Integrations:
+                  - OpenSTEF:  sdk/code-reference/integrations/openstef/database.md
           - Jobs: sdk/pipelines/jobs.md
           - Deploy:
               - Databricks Workflows: sdk/pipelines/deploy/databricks.md

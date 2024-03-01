@@ -67,6 +67,7 @@ PIPELINE_PACKAGES = [
     "ecmwf-api-client==1.6.3",
     "netCDF4==1.6.4",
     "joblib==1.3.2",
+    "openstef-dbc==3.6.17",
 ]
 
 EXTRAS_DEPENDENCIES: dict[str, list[str]] = {
