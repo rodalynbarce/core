@@ -20,6 +20,8 @@ from typing import List, Union, Dict, Any
 from fastapi import Query, Header, Depends
 from datetime import date
 from src.api.auth.azuread import oauth2_scheme
+from typing import Generic, TypeVar
+
 
 EXAMPLE_DATE = "2022-01-01"
 EXAMPLE_DATETIME = "2022-01-01T15:00:00"
@@ -67,6 +69,12 @@ class LatestRow(BaseModel):
     GoodValueType: Union[str, None]
 
 
+class PaginationRow(BaseModel):
+    limit: Union[int, None]
+    offset: Union[int, None]
+    next: Union[int, None]
+
+
 class RawRow(BaseModel):
     EventTime: datetime
     TagName: str
@@ -90,6 +98,7 @@ class MetadataResponse(BaseModel):
         None, alias="schema", serialization_alias="schema"
     )
     data: List[MetadataRow]
+    pagination: Union[PaginationRow, None]
 
 
 class LatestResponse(BaseModel):
@@ -97,6 +106,7 @@ class LatestResponse(BaseModel):
         None, alias="schema", serialization_alias="schema"
     )
     data: List[LatestRow]
+    pagination: Union[PaginationRow, None]
 
 
 class RawResponse(BaseModel):
@@ -104,6 +114,18 @@ class RawResponse(BaseModel):
         None, alias="schema", serialization_alias="schema"
     )
     data: List[RawRow]
+    pagination: Union[PaginationRow, None]
+
+
+SqlT = TypeVar("SqlT")
+
+
+class SqlResponse(BaseModel, Generic[SqlT]):
+    field_schema: FieldSchema = Field(
+        None, alias="schema", serialization_alias="schema"
+    )
+    data: List[SqlT]
+    pagination: Union[PaginationRow, None]
 
 
 class ResampleInterpolateRow(BaseModel):
@@ -123,6 +145,7 @@ class ResampleInterpolateResponse(BaseModel):
         None, alias="schema", serialization_alias="schema"
     )
     data: List[ResampleInterpolateRow]
+    pagination: Union[PaginationRow, None]
 
 
 class SummaryResponse(BaseModel):
@@ -130,6 +153,7 @@ class SummaryResponse(BaseModel):
         None, alias="schema", serialization_alias="schema"
     )
     data: List[SummaryRow]
+    pagination: Union[PaginationRow, None]
 
 
 class PivotResponse(BaseModel):
@@ -137,6 +161,7 @@ class PivotResponse(BaseModel):
         None, alias="schema", serialization_alias="schema"
     )
     data: List[PivotRow]
+    pagination: Union[PaginationRow, None]
 
 
 class HTTPError(BaseModel):
@@ -154,26 +179,38 @@ class BaseHeaders:
     def __init__(
         self,
         x_databricks_server_hostname: str = Header(
-            default=...
-            if os.getenv("DATABRICKS_SQL_SERVER_HOSTNAME") is None
-            else os.getenv("DATABRICKS_SQL_SERVER_HOSTNAME"),
+            default=(
+                ...
+                if os.getenv("DATABRICKS_SQL_SERVER_HOSTNAME") is None
+                else os.getenv("DATABRICKS_SQL_SERVER_HOSTNAME")
+            ),
             description="Databricks SQL Server Hostname",
-            include_in_schema=True
-            if os.getenv("DATABRICKS_SQL_SERVER_HOSTNAME") is None
-            else False,
+            include_in_schema=(
+                True if os.getenv("DATABRICKS_SQL_SERVER_HOSTNAME") is None else False
+            ),
         ),
         x_databricks_http_path: str = Header(
-            default=...
-            if os.getenv("DATABRICKS_SQL_HTTP_PATH") is None
-            else os.getenv("DATABRICKS_SQL_HTTP_PATH"),
+            default=(
+                ...
+                if os.getenv("DATABRICKS_SQL_HTTP_PATH") is None
+                else os.getenv("DATABRICKS_SQL_HTTP_PATH")
+            ),
             description="Databricks SQL HTTP Path",
-            include_in_schema=True
-            if os.getenv("DATABRICKS_SQL_HTTP_PATH") is None
-            else False,
+            include_in_schema=(
+                True if os.getenv("DATABRICKS_SQL_HTTP_PATH") is None else False
+            ),
         ),
     ):
         self.x_databricks_server_hostname = x_databricks_server_hostname
         self.x_databricks_http_path = x_databricks_http_path
+
+
+class AuthQueryParams:
+    def __init__(
+        self,
+        authorization: str = Depends(oauth2_scheme),
+    ):
+        self.authorization = authorization
 
 
 class BaseQueryParams:
@@ -226,6 +263,10 @@ class RawQueryParams:
         self.include_bad_data = include_bad_data
         self.start_date = start_date
         self.end_date = end_date
+
+
+class SqlBodyParams(BaseModel):
+    sql_statement: str
 
 
 class TagsQueryParams:

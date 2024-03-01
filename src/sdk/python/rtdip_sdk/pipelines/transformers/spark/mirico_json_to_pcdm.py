@@ -23,13 +23,15 @@ from pyspark.sql.functions import (
     map_keys,
     map_values,
     concat_ws,
+    to_timestamp,
+    upper,
+    when,
 )
 from ...._sdk_utils.compare_versions import (
     _package_version_meets_minimum,
 )
 from ..interfaces import TransformerInterface
 from ..._pipeline_utils.models import Libraries, SystemType
-from ..._pipeline_utils.spark import SEM_SCHEMA
 from ..._pipeline_utils import mirico_field_mappings
 
 
@@ -47,6 +49,7 @@ class MiricoJsonToPCDMTransformer(TransformerInterface):
         source_column_name="body",
         status_null_value="Good",
         change_type_value="insert"
+        tagname_field="test"
     )
 
     result = mirico_json_to_pcdm_transformer.transform()
@@ -57,6 +60,7 @@ class MiricoJsonToPCDMTransformer(TransformerInterface):
         source_column_name (str): Spark Dataframe column containing the OPC Publisher Json OPC UA data
         status_null_value (optional str): If populated, will replace 'Good' in the Status column with the specified value.
         change_type_value (optional str): If populated, will replace 'insert' in the ChangeType column with the specified value.
+        tagname_field (optional str): If populated, will add the specified field to the TagName column.
     """
 
     data: DataFrame
@@ -70,12 +74,14 @@ class MiricoJsonToPCDMTransformer(TransformerInterface):
         source_column_name: str,
         status_null_value: str = "Good",
         change_type_value: str = "insert",
+        tagname_field: str = None,
     ) -> None:
         _package_version_meets_minimum("pyspark", "3.4.0")
         self.data = data
         self.source_column_name = source_column_name
         self.status_null_value = status_null_value
         self.change_type_value = change_type_value
+        self.tagname_field = tagname_field
 
     @staticmethod
     def system_type():
@@ -116,7 +122,7 @@ class MiricoJsonToPCDMTransformer(TransformerInterface):
             .withColumn("Value", map_values("body"))
             .select(
                 map_from_arrays("TagName", "Value").alias("x"),
-                col("x.timeStamp").alias("EventTime"),
+                to_timestamp(col("x.timeStamp")).alias("EventTime"),
                 col("x.siteName").alias("SiteName"),
             )
             .select("EventTime", "SiteName", posexplode("x"))
@@ -125,7 +131,23 @@ class MiricoJsonToPCDMTransformer(TransformerInterface):
             )
             .withColumn("Status", lit("Good"))
             .withColumn("ChangeType", lit("insert"))
-            .withColumn("TagName", concat_ws(":", *[col("SiteName"), col("key")]))
+            .withColumn(
+                "TagName",
+                when(
+                    lit(self.tagname_field).isNotNull(),
+                    concat_ws(
+                        ":",
+                        *[
+                            upper(lit(self.tagname_field)),
+                            concat_ws(
+                                "_", *[upper(col("SiteName")), upper(col("key"))]
+                            ),
+                        ]
+                    ),
+                ).otherwise(
+                    concat_ws("_", *[upper(col("SiteName")), upper(col("key"))])
+                ),
+            )
         )
         return df.select(
             "EventTime", "TagName", "Status", "Value", "ValueType", "ChangeType"
