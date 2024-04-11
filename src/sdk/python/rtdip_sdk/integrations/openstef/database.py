@@ -86,11 +86,6 @@ class DataBase(metaclass=Singleton):
         config: Configuration object. See Attributes table below.
 
     Attributes:
-        api_username (str): API username
-        api_password (str): API password
-        api_admin_username (str): API admin username
-        api_admin_password (str): API admin password
-        api_url (str): API url
         pcdm_host (str): Databricks hostname for Time Series data
         pcdm_token (str): Databricks token
         pcdm_port (int): Databricks port
@@ -182,7 +177,5 @@ class DataBase(metaclass=Singleton):
 
     def __init__(self, config: BaseSettings):
         self._datainterface = _DataInterface(config)
-        # Ktp api
-        self.ktp_api = self._datainterface.ktp_api
 
         DataBase._instance = self

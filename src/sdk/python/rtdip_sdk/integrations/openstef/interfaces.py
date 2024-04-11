@@ -23,7 +23,6 @@ from sqlalchemy import text
 
 from openstef_dbc.data_interface import _DataInterface
 from openstef_dbc import Singleton
-from openstef_dbc.ktp_api import KtpApi
 from openstef_dbc.log import logging
 from ._query_builder import _query_builder
 
@@ -39,19 +38,12 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
 
         Args:
             config: Configuration object. with the following attributes:
-                api_username (str): API username.
-                api_password (str): API password.
-                api_admin_username (str): API admin username.
-                api_admin_password (str): API admin password.
-                api_url (str): API url.
-
                 pcdm_host (str): Databricks hostname.
                 pcdm_token (str): Databricks token.
                 pcdm_port (int): Databricks port.
                 pcdm_catalog (str): Databricks catalog.
                 pcdm_schema (str): Databricks schema.
                 pcdm_http_path (str): SQL warehouse http path.
-
                 db_host (str): Databricks hostname.
                 db_token (str): Databricks token.
                 db_port (int): Databricks port.
@@ -66,15 +58,6 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         openstef_dbc.data_interface._DataInterface = _DataInterface
 
         self.logger = logging.get_logger(self.__class__.__name__)
-
-        self.ktp_api = KtpApi(
-            username=config.api_username,
-            password=config.api_password,
-            admin_username=config.api_admin_username,
-            admin_password=config.api_admin_password,
-            url=config.api_url,
-            proxies=config.proxies,
-        )
 
         self.pcdm_engine = self._create_mysql_engine(
             hostname=config.pcdm_host,

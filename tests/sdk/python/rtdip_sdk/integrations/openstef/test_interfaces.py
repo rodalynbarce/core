@@ -19,18 +19,33 @@ import pandas as pd
 import pytest
 import sqlalchemy
 from src.sdk.python.rtdip_sdk.integrations.openstef.interfaces import _DataInterface
+from openstef_dbc import Singleton
 from pytest_mock import MockerFixture
 from pydantic.v1 import BaseSettings
 from typing import Union
 
 
-query_error = "Error occured during executing query"
-test_query = "SELECT * FROM test_table"
+QUERY_EXECUTION_ERROR_MSG = "Error occured during executing query"
+SAMPLE_SQL_QUERY = "SELECT * FROM test_table"
+PANDAS_DATAFRAME_PATH = "pandas.DataFrame"
+CREATE_ENGINE_PATH = "sqlalchemy.engine.create_engine"
 
 
-class MockedResult:
+class MockedCursor:
     def __init__(self, rowcount):
         self.rowcount = rowcount
+
+    def cursor(self):
+        pass  # do nothing
+
+    def fetchall(self):
+        pass  # do nothing
+
+    def keys(self):
+        pass  # do nothing
+
+    def close(self):
+        pass  # do nothing
 
 
 class MockedConnection:
@@ -41,7 +56,10 @@ class MockedConnection:
         pass  # do nothing
 
     def execute(self, *args, **kwargs):
-        return MockedResult(rowcount=3)
+        return MockedCursor(rowcount=3)
+
+    def close(self):
+        pass  # do nothing
 
 
 class MockedEngine:
@@ -73,8 +91,35 @@ class Settings(BaseSettings):
 config = Settings()
 
 
-def test_exec_influx_one_query(mocker: MockerFixture):
-    df = pd.DataFrame(
+@pytest.fixture(autouse=True)
+def reset_data_interface():
+    # Resets the singleton instance
+    _DataInterface._instance = None
+    Singleton._instances = {}
+    yield
+
+
+def test_create_mysql_engine(mocker: MockerFixture):
+    mocked_engine = mocker.patch(CREATE_ENGINE_PATH, return_value=MockedEngine())
+
+    _DataInterface(config)
+
+    assert mocked_engine.call_count == 2
+
+
+def test_create_mysql_engine_fails(mocker: MockerFixture, caplog):
+    mocker.patch(CREATE_ENGINE_PATH, side_effect=Exception)
+
+    with pytest.raises(Exception):
+        _DataInterface(config)
+
+    assert "Could not connect to Databricks database" in caplog.text
+
+
+def test_exec_influx_query(mocker: MockerFixture):
+    mocker.patch(CREATE_ENGINE_PATH, return_value=MockedEngine())
+
+    mock_df = pd.DataFrame(
         {
             "_time": [
                 "2023-08-29T08:00:00+01:00",
@@ -84,7 +129,8 @@ def test_exec_influx_one_query(mocker: MockerFixture):
             "_value": ["1", "2", "data"],
         }
     )
-    mocked_read_sql = mocker.patch.object(pd, "read_sql", return_value=df)
+
+    mocked_df = mocker.patch(PANDAS_DATAFRAME_PATH, return_value=mock_df)
 
     interface = _DataInterface(config)
 
@@ -96,11 +142,13 @@ def test_exec_influx_one_query(mocker: MockerFixture):
 
     interface.exec_influx_query(flux_query, {})
 
-    mocked_read_sql.assert_called_once()
+    mocked_df.assert_called_once()
 
 
-def test_exec_influx_multi_query(mocker: MockerFixture):
-    df = pd.DataFrame(
+def test_exec_influx_query_multi(mocker: MockerFixture):
+    mocker.patch(CREATE_ENGINE_PATH, return_value=MockedEngine())
+
+    mock_df = pd.DataFrame(
         {
             "_time": [
                 "2023-08-29T08:00:00+01:00",
@@ -110,7 +158,8 @@ def test_exec_influx_multi_query(mocker: MockerFixture):
             "_value": ["1", "2", "data"],
         }
     )
-    mocked_read_sql = mocker.patch.object(pd, "read_sql", return_value=df)
+
+    mocked_df = mocker.patch(PANDAS_DATAFRAME_PATH, return_value=mock_df)
 
     interface = _DataInterface(config)
 
@@ -118,22 +167,31 @@ def test_exec_influx_multi_query(mocker: MockerFixture):
     data = from(bucket: "test/bucket" )   
         |> range(start: 2023-08-29T00:00:00Z, stop: 2023-08-30T00:00:00Z) 
         |> filter(fn: (r) => r._measurement == "sjv")
+
     data
         |> group() |> aggregateWindow(every: 15m, fn: sum)
         |> yield(name: "test_1")
+
     data
         |> group() |> aggregateWindow(every: 15m, fn: count)
         |> yield(name: "test_2")
     """
 
-    interface.exec_influx_query(flux_query, {})
+    result = interface.exec_influx_query(flux_query, {})
 
-    mocked_read_sql.assert_called()
-    assert mocked_read_sql.call_count == 2
+    mocked_df.assert_called()
+    assert isinstance(result, list)
 
 
 def test_exec_influx_query_fails(mocker: MockerFixture, caplog):
-    mocker.patch.object(pd, "read_sql", side_effect=Exception)
+    mocked_connection = mocker.MagicMock()
+    mocked_connection.__enter__.return_value = mocked_connection
+    mocked_connection.execute.side_effect = Exception()
+
+    mocked_engine = mocker.MagicMock()
+    mocked_engine.connect.return_value = mocked_connection
+
+    mocker.patch(CREATE_ENGINE_PATH, return_value=mocked_engine)
 
     interface = _DataInterface(config)
 
@@ -148,7 +206,7 @@ def test_exec_influx_query_fails(mocker: MockerFixture, caplog):
 
     escaped_query = flux_query.replace("\n", "\\n").replace("\t", "\\t")
 
-    assert query_error in caplog.text
+    assert QUERY_EXECUTION_ERROR_MSG in caplog.text
     assert escaped_query in caplog.text
 
 
@@ -204,70 +262,83 @@ def test_exec_influx_write_fails(mocker: MockerFixture, caplog):
 
 
 def test_exec_sql_query(mocker: MockerFixture):
-    mocked_read_sql = mocker.patch.object(pd, "read_sql", return_value=None)
+    mocker.patch(CREATE_ENGINE_PATH, return_value=MockedEngine())
+    mocked_df = mocker.patch(PANDAS_DATAFRAME_PATH, return_value=None)
 
     interface = _DataInterface(config)
     sql_query = interface.exec_sql_query("SELECT * FROM test_table", {})
 
-    mocked_read_sql.assert_called_once()
+    mocked_df.assert_called_once()
     assert sql_query is None
 
 
 def test_exec_sql_query_operational_fails(mocker: MockerFixture, caplog):
-    interface = _DataInterface(config)
-
-    mocker.patch.object(
-        pd,
-        "read_sql",
-        side_effect=sqlalchemy.exc.OperationalError(
-            None, None, "Lost connection to Databricks database"
-        ),
+    mocked_connection = mocker.MagicMock()
+    mocked_connection.__enter__.return_value = mocked_connection
+    mocked_connection.execute.side_effect = sqlalchemy.exc.OperationalError(
+        None, None, "Lost connection to Databricks database"
     )
 
+    mocked_engine = mocker.MagicMock()
+    mocked_engine.connect.return_value = mocked_connection
+
+    mocker.patch(CREATE_ENGINE_PATH, return_value=mocked_engine)
+
+    interface = _DataInterface(config)
+
     with pytest.raises(sqlalchemy.exc.OperationalError):
-        interface.exec_sql_query(test_query, {})
+        interface.exec_sql_query(SAMPLE_SQL_QUERY, {})
 
     assert "Lost connection to Databricks database" in caplog.text
-    assert test_query not in caplog.text
+    assert SAMPLE_SQL_QUERY not in caplog.text
 
 
 def test_exec_sql_query_programming_fails(mocker: MockerFixture, caplog):
-    interface = _DataInterface(config)
-
-    mocker.patch.object(
-        pd,
-        "read_sql",
-        side_effect=sqlalchemy.exc.ProgrammingError(None, None, query_error),
+    mocked_connection = mocker.MagicMock()
+    mocked_connection.__enter__.return_value = mocked_connection
+    mocked_connection.execute.side_effect = sqlalchemy.exc.ProgrammingError(
+        None, None, QUERY_EXECUTION_ERROR_MSG
     )
 
-    with pytest.raises(sqlalchemy.exc.ProgrammingError):
-        interface.exec_sql_query(test_query, {})
+    mocked_engine = mocker.MagicMock()
+    mocked_engine.connect.return_value = mocked_connection
 
-    assert query_error in caplog.text
-    assert test_query in caplog.text
+    mocker.patch(CREATE_ENGINE_PATH, return_value=mocked_engine)
+
+    interface = _DataInterface(config)
+
+    with pytest.raises(sqlalchemy.exc.ProgrammingError):
+        interface.exec_sql_query(SAMPLE_SQL_QUERY, {})
+
+    assert QUERY_EXECUTION_ERROR_MSG in caplog.text
+    assert SAMPLE_SQL_QUERY in caplog.text
 
 
 def test_exec_sql_query_database_fails(mocker: MockerFixture, caplog):
-    interface = _DataInterface(config)
-
-    mocker.patch.object(
-        pd,
-        "read_sql",
-        side_effect=sqlalchemy.exc.DatabaseError(
-            None, None, "Can't connect to Databricks database"
-        ),
+    mocked_connection = mocker.MagicMock()
+    mocked_connection.__enter__.return_value = mocked_connection
+    mocked_connection.execute.side_effect = sqlalchemy.exc.DatabaseError(
+        None, None, "Can't connect to Databricks database"
     )
 
+    mocked_engine = mocker.MagicMock()
+    mocked_engine.connect.return_value = mocked_connection
+
+    mocker.patch(CREATE_ENGINE_PATH, return_value=mocked_engine)
+
+    interface = _DataInterface(config)
+
     with pytest.raises(sqlalchemy.exc.DatabaseError):
-        interface.exec_sql_query(test_query, {})
+        interface.exec_sql_query(SAMPLE_SQL_QUERY, {})
 
     assert "Can't connect to Databricks database" in caplog.text
-    assert test_query not in caplog.text
+    assert SAMPLE_SQL_QUERY not in caplog.text
 
 
 def test_exec_sql_write(mocker: MockerFixture):
+    mocker.patch(CREATE_ENGINE_PATH, return_value=MockedEngine())
+
     interface = _DataInterface(config)
-    mocker.patch.object(interface, "mysql_engine", new_callable=MockedEngine)
 
     sql_write = interface.exec_sql_write("INSERT INTO test_table VALUES (1, 'test')")
 
@@ -275,7 +346,14 @@ def test_exec_sql_write(mocker: MockerFixture):
 
 
 def test_exec_sql_write_fails(mocker: MockerFixture, caplog):
-    mocker.patch.object(_DataInterface, "_create_mysql_engine", return_value=Exception)
+    mocked_connection = mocker.MagicMock()
+    mocked_connection.__enter__.return_value = mocked_connection
+    mocked_connection.execute.side_effect = Exception()
+
+    mocked_engine = mocker.MagicMock()
+    mocked_engine.connect.return_value = mocked_connection
+
+    mocker.patch(CREATE_ENGINE_PATH, return_value=mocked_engine)
 
     interface = _DataInterface(config)
 
@@ -284,16 +362,16 @@ def test_exec_sql_write_fails(mocker: MockerFixture, caplog):
     with pytest.raises(Exception):
         interface.exec_sql_write(query)
 
-    assert query_error in caplog.text
+    assert QUERY_EXECUTION_ERROR_MSG in caplog.text
     assert query in caplog.text
 
 
 def test_exec_sql_dataframe_write(mocker: MockerFixture):
     mocked_to_sql = mocker.patch.object(pd.DataFrame, "to_sql", return_value=None)
 
-    expected_data = pd.DataFrame({"test": ["1", "2", "data"]})
+    mock_df = pd.DataFrame({"test": ["1", "2", "data"]})
     interface = _DataInterface(config)
-    sql_write = interface.exec_sql_dataframe_write(expected_data, "test_table")
+    sql_write = interface.exec_sql_dataframe_write(mock_df, "test_table")
 
     mocked_to_sql.assert_called_once()
     assert sql_write is None
@@ -303,7 +381,16 @@ def test_exec_sql_dataframe_write_fails(mocker: MockerFixture):
     mocker.patch.object(pd.DataFrame, "to_sql", side_effect=Exception)
 
     interface = _DataInterface(config)
-    expected_data = pd.DataFrame({"test": ["1", "2", "data"]})
+    mock_df = pd.DataFrame({"test": ["1", "2", "data"]})
 
     with pytest.raises(Exception):
-        interface.exec_sql_dataframe_write(expected_data, "test_table")
+        interface.exec_sql_dataframe_write(mock_df, "test_table")
+
+
+def test_check_mysql_available(mocker: MockerFixture):
+    mock_df = pd.DataFrame({"Database": ["1", "2", "data"]})
+    mocker.patch(CREATE_ENGINE_PATH, return_value=MockedEngine())
+    mocker.patch(PANDAS_DATAFRAME_PATH, return_value=mock_df)
+
+    interface = _DataInterface(config)
+    interface.check_mysql_available()
