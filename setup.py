@@ -36,8 +36,9 @@ INSTALL_REQUIRES = [
     "importlib_metadata>=1.0.0",
     "semver==3.0.0",
     "xlrd==2.0.1",
-    "langchain==0.0.291",
-    "openai==0.27.8",
+    "langchain==0.1.11",
+    "openai==1.13.3",
+    "pydantic==2.4.2",
 ]
 
 PYSPARK_PACKAGES = [
