@@ -47,11 +47,6 @@ class DataBase(metaclass=Singleton):
     token = auth.get_token("2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default").token
 
     class ConfigSettings(BaseSettings):
-        api_username: str = "None"
-        api_password: str = "None"
-        api_admin_username: str = "None"
-        api_admin_password: str = "None"
-        api_url: str = "None"
         pcdm_host: str = "{DATABRICKS-SERVER-HOSTNAME}"
         pcdm_token: str = token
         pcdm_port: int = 443
