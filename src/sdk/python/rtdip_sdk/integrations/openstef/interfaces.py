@@ -142,7 +142,7 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
             query_list = _query_builder(query)
             connection = self.pcdm_engine.connect()
             if len(query_list) == 1:
-                cursor = connection.execute(query_list[0])
+                cursor = connection.execute(text(query_list[0]))
                 df = pd.DataFrame(cursor.fetchall(), columns=cursor.keys())
                 cursor.close()
                 connection.close()
@@ -151,7 +151,7 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
             elif len(query_list) > 1:
                 df_list = []
                 for query in query_list:
-                    cursor = connection.execute(query)
+                    cursor = connection.execute(text(query))
                     df = pd.DataFrame(cursor.fetchall(), columns=cursor.keys())
                     cursor.close()
                     df["_time"] = pd.to_datetime(df["_time"], utc=True)
@@ -194,6 +194,62 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
             raise ValueError(
                 f"Dataframe missing tag columns. Missing tag columns: {tag_cols}"
             )
+        
+    def _convert_df(self, df, id_vars, field_columns, measurement, tag_columns, casting_fields):
+        df.index = df.index.strftime("%Y-%m-%dT%H:%M:%S")
+        df = df.reset_index(names=["EventTime"])
+        df = pd.melt(
+            df,
+            id_vars=id_vars,
+            value_vars=field_columns,
+            var_name="_field",
+            value_name="Value",
+        )
+
+        if measurement == "weather":
+            list_of_cities = df["input_city"].unique()
+            coordinates = {}
+
+            for city in list_of_cities:
+                location = geopy.geocoders.Nominatim().geocode(city)
+                location = (location.latitude, location.longitude)
+                coordinates.update({city: location})
+
+            df["Latitude"] = df["input_city"].map(lambda x: coordinates[x][0])
+            df["Longitude"] = df["input_city"].map(lambda x: coordinates[x][1])
+            df["EnqueuedTime"] = datetime.now()
+            df["Latest"] = True
+            df["EventDate"] = df["EventTime"].dt.date
+            df["TagName"] = df[["_field"] + tag_columns].apply(":".join, axis=1)
+            tag_columns.remove("source")
+            df.rename(columns={"source": "Source"})
+        else:
+            df["TagName"] = df[["_field"] + tag_columns].apply(":".join, axis=1)
+
+        df["Status"] = "Good"
+        df.drop(columns=tag_columns + ["_field"], inplace=True)
+
+        # Write to different tables
+        df_cast = df.copy()
+        df_cast["ValueType"] = df_cast["TagName"].str.split(":").str[0]
+        df_cast["ValueType"] = df_cast["ValueType"].map(casting_fields)
+
+        int_df = df_cast.loc[df_cast["ValueType"] == "int"].copy()
+        int_df.drop(columns=["ValueType"], inplace=True)
+        int_df = int_df.astype({"Value": np.int64})
+
+        float_df = df_cast.loc[df_cast["ValueType"] == "float"].copy()
+        float_df.drop(columns=["ValueType"], inplace=True)
+        float_df = float_df.astype({"Value": np.float64})
+
+        str_df = df_cast.loc[df_cast["ValueType"] == "str"].copy()
+        str_df.drop(columns=["ValueType"], inplace=True)
+        str_df = str_df.astype({"Value": str})
+
+        if measurement.lower() == "prediction_taheads" or measurement.lower() == "prediction":
+            df = df.astype({"Value": str})
+
+        return df, int_df, float_df, str_df, measurement
 
     def exec_influx_write(
         self,
@@ -281,57 +337,7 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         if measurement == "sjv" or measurement == "marketprices":
             casting_fields.update(dict.fromkeys(list(df.columns)[:-1], "float"))
 
-        df.index = df.index.strftime("%Y-%m-%dT%H:%M:%S")
-        df = df.reset_index(names=["EventTime"])
-        df = pd.melt(
-            df,
-            id_vars=id_vars,
-            value_vars=field_columns,
-            var_name="_field",
-            value_name="Value",
-        )
-
-        if measurement == "weather":
-            list_of_cities = df["input_city"].unique()
-            coordinates = {}
-
-            for city in list_of_cities:
-                location = geopy.geocoders.Nominatim().geocode(city)
-                location = (location.latitude, location.longitude)
-                coordinates.update({city: location})
-
-            df["Latitude"] = df["input_city"].map(lambda x: coordinates[x][0])
-            df["Longitude"] = df["input_city"].map(lambda x: coordinates[x][1])
-            df["EnqueuedTime"] = datetime.now()
-            df["Latest"] = True
-            df["EventDate"] = df["EventTime"].dt.date
-            df["TagName"] = df[["_field"] + tag_columns].apply(":".join, axis=1)
-            tag_columns.remove("source")
-            df.rename(columns={"source": "Source"})
-        else:
-            df["TagName"] = df[["_field"] + tag_columns].apply(":".join, axis=1)
-
-        df["Status"] = "Good"
-        df.drop(columns=tag_columns + ["_field"], inplace=True)
-
-        # Write to different tables
-        df_cast = df.copy()
-        df_cast["ValueType"] = df_cast["TagName"].str.split(":").str[0]
-        df_cast["ValueType"] = df_cast["ValueType"].map(casting_fields)
-
-        int_df = df_cast.loc[df_cast["ValueType"] == "int"].copy()
-        int_df.drop(columns=["ValueType"], inplace=True)
-        int_df = int_df.astype({"Value": np.int64})
-
-        float_df = df_cast.loc[df_cast["ValueType"] == "float"].copy()
-        float_df.drop(columns=["ValueType"], inplace=True)
-        float_df = float_df.astype({"Value": np.float64})
-
-        str_df = df_cast.loc[df_cast["ValueType"] == "str"].copy()
-        str_df.drop(columns=["ValueType"], inplace=True)
-        str_df = str_df.astype({"Value": str})
-
-        df = df.astype({"Value": str})
+        df, int_df, float_df, str_df, measurement = self._convert_df(df, id_vars, field_columns, measurement, tag_columns, casting_fields)
 
         dataframes = [
             (df, measurement),
@@ -343,13 +349,24 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         try:
             for df, measurement in dataframes:
                 if not df.empty:
-                    df.to_sql(
-                        measurement.lower(),
-                        self.pcdm_engine,
-                        if_exists="append",
-                        index=False,
-                        method="multi",
-                    )
+                    if measurement.lower() == 'weather':
+                        df.to_sql(
+                            measurement.lower(),
+                            self.pcdm_engine,
+                            if_exists="append",
+                            index=False,
+                            chunksize=25,
+                            method="multi",
+                        )
+                    else:
+                        df.to_sql(
+                            measurement.lower(),
+                            self.pcdm_engine,
+                            if_exists="append",
+                            index=False,
+                            chunksize=63,
+                            method="multi",
+                        )
             return True
         except Exception as e:
             self.logger.error(
@@ -388,11 +405,14 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
 
         query = " ".join(new_query)
 
+        query_format = sqlparams.SQLParams("pyformat", "named")
+        query, params = query_format.format(query, params)
+
         try:
             connection = self.mysql_engine.connect()
             if params is None:
                 params = {}
-            cursor = connection.execute(query, **params)
+            cursor = connection.execute(text(query), params)
             connection.close()
             if cursor.cursor is not None:
                 return pd.DataFrame(cursor.fetchall())
@@ -444,7 +464,7 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
 
         try:
             with self.mysql_engine.connect() as connection:
-                response = connection.execute(statement, params=params)
+                response = connection.execute(text(statement), params=params)
 
                 self.logger.info(
                     "Added {} new systems to the systems table in the MySQL database".format(
