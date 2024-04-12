@@ -65,11 +65,11 @@ PIPELINE_PACKAGES = [
     "grpcio>=1.48.1",
     "grpcio-status>=1.48.1",
     "googleapis-common-protos>=1.56.4",
-    "entsoe-py==0.5.10",
+    "entsoe-py==0.6.7",
 ]
 
 INTEGRATION_PACKAGES = [
-    "openstef-dbc==3.6.17",
+    "openstef-dbc==3.7.7",
     "sqlparams==5.1.0",
 ]
 
