@@ -194,8 +194,10 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
             raise ValueError(
                 f"Dataframe missing tag columns. Missing tag columns: {tag_cols}"
             )
-        
-    def _convert_df(self, df, id_vars, field_columns, measurement, tag_columns, casting_fields):
+
+    def _convert_df(
+        self, df, id_vars, field_columns, measurement, tag_columns, casting_fields
+    ):
         df.index = df.index.strftime("%Y-%m-%dT%H:%M:%S")
         df = df.reset_index(names=["EventTime"])
         df = pd.melt(
@@ -246,7 +248,10 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         str_df.drop(columns=["ValueType"], inplace=True)
         str_df = str_df.astype({"Value": str})
 
-        if measurement.lower() == "prediction_taheads" or measurement.lower() == "prediction":
+        if (
+            measurement.lower() == "prediction_taheads"
+            or measurement.lower() == "prediction"
+        ):
             df = df.astype({"Value": str})
 
         return df, int_df, float_df, str_df, measurement
@@ -337,7 +342,9 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         if measurement == "sjv" or measurement == "marketprices":
             casting_fields.update(dict.fromkeys(list(df.columns)[:-1], "float"))
 
-        df, int_df, float_df, str_df, measurement = self._convert_df(df, id_vars, field_columns, measurement, tag_columns, casting_fields)
+        df, int_df, float_df, str_df, measurement = self._convert_df(
+            df, id_vars, field_columns, measurement, tag_columns, casting_fields
+        )
 
         dataframes = [
             (df, measurement),
@@ -349,7 +356,7 @@ class _DataInterface(_DataInterface, metaclass=Singleton):
         try:
             for df, measurement in dataframes:
                 if not df.empty:
-                    if measurement.lower() == 'weather':
+                    if measurement.lower() == "weather":
                         df.to_sql(
                             measurement.lower(),
                             self.pcdm_engine,
