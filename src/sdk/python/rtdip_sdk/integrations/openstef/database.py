@@ -40,8 +40,8 @@ class DataBase(metaclass=Singleton):
     ```python
     from typing import Union
     from pydantic.v1 import BaseSettings
-    from src.sdk.python.rtdip_sdk.authentication.azure import DefaultAuth
-    from src.sdk.python.rtdip_sdk.integrations.openstef.database import DataBase
+    from rtdip_sdk.authentication.azure import DefaultAuth
+    from rtdip_sdk.integrations.openstef.database import DataBase
 
     auth = DefaultAuth().authenticate()
     token = auth.get_token("2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default").token
