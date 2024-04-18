@@ -68,11 +68,6 @@ class MockedEngine:
 
 
 class Settings(BaseSettings):
-    api_username: str = "None"
-    api_password: str = "None"
-    api_admin_username: str = "None"
-    api_admin_password: str = "None"
-    api_url: str = "None"
     pcdm_host: str = "host"
     pcdm_token: str = "token"
     pcdm_port: int = 443
