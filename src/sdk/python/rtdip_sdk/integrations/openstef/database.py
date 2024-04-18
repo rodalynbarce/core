@@ -30,7 +30,7 @@ class DataBase(metaclass=Singleton):
     """
     Provides a high-level interface to various data sources.
 
-    All user/client code should use this class to get or write data. Under the hood this class uses various services to interfact with its datasource.
+    This class should be used to get or write data. Under the hood this class uses various services to interact with its datasource.
 
     !!! note "Warning"
         This is a singleton class. When calling multiple times with a config argument no new configuration will be applied.
@@ -69,8 +69,8 @@ class DataBase(metaclass=Singleton):
     weather_data = db.get_weather_data(
                     location="Deelen",
                     weatherparams=["pressure", "temp"],
-                    datetime_start=datetime(2023, 8, 29),
-                    datetime_end=datetime(2023, 8, 30),
+                    datetime_start=datetime(2024, 1, 1),
+                    datetime_end=datetime(2024, 1, 5),
                     source="harm_arome",
                     )
 
@@ -94,6 +94,10 @@ class DataBase(metaclass=Singleton):
         db_schema (str): Databricks schema
         db_http_path (str): SQL warehouse http path
         proxies Union[dict[str, str], None]: Proxies
+        externally_posted_forecasts_pids (list): List of pids for which forecasts are externally posted
+        known_zero_flatliners (list): List of pids with known zero flatlines. No model can be trained for zero flatliners
+        paths_mlflow_tracking_uri (str): A databricks workspace, provided as the string "databricks" or, to use a Databricks CLI profile, “databricks://{profileName}”. More information on how to access the MLflow tracking server outside of Databricks can be found [here](https://docs.databricks.com/en/mlflow/access-hosted-tracking-server.html)
+        paths_artifact_folder (str): Path on local machine where artifacts will be saved
     """
 
     _instance = None
