@@ -17,11 +17,11 @@ Ensure that you have followed the installation instructions as specified in the 
     For all installation options please see the RTDIP SDK installation [instructions.](../../../../getting-started/installation.md#installing-the-rtdip-sdk)
 
 ## Overview
-OpenSTEF employs a fully automated machine learning pipeline to generate future load forecasts, utilizing both historical grid data and external predictors like weather and market prices, aiding in anticipating load congestion and maximizing asset utilization. 
+OpenSTEF offers automated machine learning pipelines to generate short term load forecasts. It leverages both historical grid data and external predictors like weather and market prices, aiding in anticipating load congestion and maximizing asset utilization. 
 
-OpenSTEF tasks can be called to perform training, forecasting, and evaluation. These tasks handle fetching prediction job configuration and feature data from a database, handling task exceptions, and writing data back to a database. These tasks are driven by the corresponding pipelines, which have the ability to select the necessary features for the tasks, based on the requirements of a prediction job. Machine learning is a key component of these pipelines, enabling them to perform training, forecasting, and evaluation. The models generated from these processes are stored and managed using MLflow. Current model types that are supported include 'xgb', 'xgb_quantile', 'lgb', 'linear' and 'linear_quantile'.
+Tasks within OpenSTEF can be used to perform training, forecasting, and evaluation pipelines while handling the fetching of configuration and feature data from a database, task exceptions, and writing data back to the database. Machine learning is a key component of these pipelines, facilitating task execution and managing the resulting models with MLflow.
 
-RTDIP has simplified the usage of OpenSTEF tasks and pipelines with data ingested through RTDIP by introducing a [Database connector](../../../code-reference/integrations/openstef/database.md). This connector serves as an interface for feature and configuration data stored in Databricks, adhering to our data models.
+RTDIP has simplified the usage of OpenSTEF tasks and pipelines with data ingested through RTDIP by introducing a [Database connector](../../../code-reference/integrations/openstef/database.md). This connector serves as an interface for feature and configuration data stored in Databricks that adhere to our data models.
 
 ## Conclusion
 Find out more about OpenSTEF [here](https://openstef.github.io/openstef/index.html). For examples of how to use the [Database connector](../../../code-reference/integrations/openstef/database.md), click on the following links:

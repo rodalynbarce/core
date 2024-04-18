@@ -289,7 +289,7 @@ nav:
               - Summary: sdk/examples/query/Summary.md
       - Integrations:
           - OpenSTEF: 
-             - Overview: sdk/code-reference/integrations/openstef/overview.md
+             - Overview: sdk/integrations/openstef/overview.md
              - Database Connector: sdk/code-reference/integrations/openstef/database.md
              - Examples: 
                 - Train Model: sdk/examples/integrations/openstef/train-model.md
